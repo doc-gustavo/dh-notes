@@ -2,16 +2,18 @@ package com.dh.notesapp.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
+import java.util.List;
 
 @Component
 public class JwtUtil {
-    private static final String SECRET_KEY = "qPVYp9dLQ5w6F3XGZVuJHR8OPZKX8GqvHtfH+Apb5Yw=";
+    private static final String SECRET_KEY = "hFJ6hQzu2w5QlF8ZPsJjz/KmYtZ3jY/FjNyo3mP4yD8=";
 
     private SecretKey getSigningKey() {
         byte[] keyBytes = Decoders.BASE64.decode(SECRET_KEY);
@@ -21,9 +23,10 @@ public class JwtUtil {
     public String generateToken(String username) {
         return Jwts.builder()
                 .subject(username)
+                .claim("roles", List.of("ROLE_USER"))
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60)) // 1 hora
-                .signWith(getSigningKey())
+                .signWith(getSigningKey())  // La clave ya contiene el algoritmo adecuado
                 .compact();
     }
 
