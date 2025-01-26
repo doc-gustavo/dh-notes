@@ -3,6 +3,7 @@ package com.dh.notesapp.controller;
 import com.dh.notesapp.model.Note;
 import com.dh.notesapp.service.NoteService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -41,18 +42,21 @@ public class NoteController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('ROLE_USER')")
-    public ResponseEntity<Note> updateNote(@PathVariable("id") Long id, @Valid @RequestBody Note updatedNote) {
+    public ResponseEntity<?> updateNote(@PathVariable("id") Long id, @RequestBody Note updatedNote) {
+        Optional<Note> existingNote = noteService.getNoteById(id);
 
-            Optional<Note> existingNote = noteService.getNoteById(id);
-        if (existingNote.isPresent()) {
-            Note note = existingNote.get();
-            note.setTitle(updatedNote.getTitle());
-            note.setContent(updatedNote.getContent());
-            // No establecemos `updatedAt` manualmente porque lo hace el método @PreUpdate
-            noteService.updateNote(note);
-            return ResponseEntity.ok(note);
+        if (existingNote.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Error: La nota con ID " + id + " no fue encontrada.");
         }
-        return ResponseEntity.notFound().build();
+
+        Note note = existingNote.get();
+        note.setTitle(updatedNote.getTitle());
+        note.setContent(updatedNote.getContent());
+        note.setUpdatedAt(LocalDateTime.now());
+        noteService.updateNote(note);
+
+        return ResponseEntity.ok(note);
     }
 
     @DeleteMapping("/{id}")
