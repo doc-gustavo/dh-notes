@@ -3,19 +3,19 @@ package com.dh.notesapp.controller;
 import com.dh.notesapp.model.Note;
 import com.dh.notesapp.service.NoteService;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
 
 @RestController
 @RequestMapping("/api/notes")
@@ -40,14 +40,44 @@ public class NoteController {
     @Operation(summary = "Obtener una nota por ID", description = "Devuelve una nota si el ID es válido.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Nota encontrada"),
+            @ApiResponse(responseCode = "400", description = "ID inválido"),
             @ApiResponse(responseCode = "404", description = "Nota no encontrada")
     })
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('ROLE_USER')")
-    public ResponseEntity<Note> getNoteById(@PathVariable("id") Long id) {
-        Optional<Note> note = noteService.getNoteById(id);
-        return note.map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+    public ResponseEntity<?> getNoteById(@PathVariable Long id) {
+        try {
+            Note note = noteService.getNoteById(id);
+            return ResponseEntity.ok(note);
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "ID inválido", "message", e.getMessage()));
+        }
+    }
+
+    @Operation(summary = "Buscar notas", description = "Busca notas por título o contenido con paginación.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Notas encontradas"),
+            @ApiResponse(responseCode = "400", description = "Parámetro de búsqueda inválido")
+    })
+    @GetMapping("/search")
+    @PreAuthorize("hasAuthority('ROLE_USER')")
+    public ResponseEntity<?> searchNotes(
+            @RequestParam(name = "query", required = false) String query,
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "10") int size) {
+        try {
+            Page<Note> notes = noteService.searchNotes(query, page, size);
+            if (notes.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "No se encontraron notas."));
+            }
+            return ResponseEntity.ok(notes);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Parámetros de paginación no válidos."));
+        }
     }
 
     @Operation(summary = "Crear una nueva nota", description = "Permite crear una nueva nota válida.")
@@ -58,54 +88,12 @@ public class NoteController {
     })
     @PostMapping
     @PreAuthorize("hasAuthority('ROLE_USER')")
-    public ResponseEntity<Note> createNote(@Valid @RequestBody Note note) {
-        Note savedNote = noteService.createNote(note);
-        return ResponseEntity.status(HttpStatus.CREATED).body(savedNote);
-    }
-
-    @Operation(summary = "Actualizar una nota existente", description = "Permite actualizar una nota si el ID es válido.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Nota actualizada exitosamente"),
-            @ApiResponse(responseCode = "404", description = "Nota no encontrada"),
-            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos"),
-            @ApiResponse(responseCode = "403", description = "No autorizado")
-    })
-    @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('ROLE_USER')")
-    public ResponseEntity<?> updateNote(@PathVariable("id") Long id, @Valid @RequestBody Note updatedNote) {
-        Optional<Note> existingNote = noteService.getNoteById(id);
-
-        if (existingNote.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("error", "La nota con ID " + id + " no fue encontrada."));
+    public ResponseEntity<?> createNote(@Valid @RequestBody Note note) {
+        try {
+            Note savedNote = noteService.createNote(note);
+            return ResponseEntity.status(HttpStatus.CREATED).body(savedNote);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
-
-        Note note = existingNote.get();
-        note.setTitle(updatedNote.getTitle());
-        note.setContent(updatedNote.getContent());
-        note.setUpdatedAt(LocalDateTime.now());
-        noteService.updateNote(note);
-
-        return ResponseEntity.ok(note);
-    }
-
-    @Operation(summary = "Eliminar una nota por ID", description = "Permite eliminar una nota si el ID es válido.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Nota eliminada exitosamente"),
-            @ApiResponse(responseCode = "404", description = "Nota no encontrada"),
-            @ApiResponse(responseCode = "403", description = "No autorizado")
-    })
-    @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('ROLE_USER')")
-    public ResponseEntity<?> deleteNoteById(@PathVariable("id") Long id) {
-        Optional<Note> existingNote = noteService.getNoteById(id);
-
-        if (existingNote.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("error", "La nota con ID " + id + " no fue encontrada."));
-        }
-
-        noteService.deleteNoteById(id);
-        return ResponseEntity.noContent().build();
     }
 }
